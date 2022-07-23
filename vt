@@ -1,0 +1,69 @@
+#!/usr/bin/python
+# VT documentation: https://www.virustotal.com/en/documentation/public-api/
+
+import http.client
+import json
+import hashlib
+import argparse
+import sys
+import time
+import os
+
+# https://www.virustotal.com/gui/user/<login>/apikey
+vt_api_key = ''
+
+
+def sha256_hash(file):
+    file_hash_sha256 = hashlib.sha256()
+    file_hash_md5 = hashlib.md5()
+    block_size = 65536
+    with open(file, 'rb') as f:
+        fb = f.read(block_size)
+        while len(fb) > 0:
+            file_hash_sha256.update(fb)
+            file_hash_md5.update(fb)
+            fb = f.read(block_size)
+    return file_hash_sha256.hexdigest()
+
+
+def vt_check(hash):
+    conn = http.client.HTTPSConnection("www.virustotal.com")
+    conn.request('GET', f'/vtapi/v2/file/report?apikey={vt_api_key}&resource={hash}')
+    res = conn.getresponse()
+    if res.status == 200:
+        data = res.read()
+        if data:
+            data_decoded = json.loads(data)
+            if data_decoded['response_code'] == 1:
+                url = f'https://www.virustotal.com/gui/search/{hash}'
+            else:
+                url = 'VT - file not found'
+        else:
+            url = 'VT - unable to get page content'
+    else:
+        url = 'VT - returned code != 200'
+
+    conn.close()
+    return url
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('files', metavar='file', type=str, nargs='+', help='File(s) to check')
+    args = parser.parse_args()
+    files = args.files
+
+    for file in files:
+        if not os.path.isfile(file):
+            continue
+
+        file_hash = sha256_hash(file)
+        vt_url = vt_check(file_hash)
+        print(f'{file}\t{file_hash}\t{vt_url}')
+
+        if len(files) > 4:
+            time.sleep(16)
+
+
+if __name__ == '__main__':
+    main()
