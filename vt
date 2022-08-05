@@ -1,13 +1,13 @@
 #!/usr/bin/python
+
 # VT documentation: https://www.virustotal.com/en/documentation/public-api/
 
+import argparse
+import hashlib
 import http.client
 import json
-import hashlib
-import argparse
-import sys
-import time
 import os
+import time
 
 # https://www.virustotal.com/gui/user/<login>/apikey
 vt_api_key = ''
@@ -27,6 +27,9 @@ def sha256_hash(file):
 
 
 def vt_check(hash):
+    positives = '-'
+    total = '-'
+
     conn = http.client.HTTPSConnection("www.virustotal.com")
     conn.request('GET', f'/vtapi/v2/file/report?apikey={vt_api_key}&resource={hash}')
     res = conn.getresponse()
@@ -35,16 +38,18 @@ def vt_check(hash):
         if data:
             data_decoded = json.loads(data)
             if data_decoded['response_code'] == 1:
-                url = f'https://www.virustotal.com/gui/search/{hash}'
+                status = f'https://www.virustotal.com/gui/search/{hash}'
+                positives = data_decoded['positives']
+                total = data_decoded['total']
             else:
-                url = 'VT - file not found'
+                status = 'VT - file not found'
         else:
-            url = 'VT - unable to get page content'
+            status = 'VT - unable to get page content'
     else:
-        url = 'VT - returned code != 200'
+        status = 'VT - returned code != 200'
 
     conn.close()
-    return url
+    return status, positives, total
 
 
 def main():
@@ -58,8 +63,9 @@ def main():
             continue
 
         file_hash = sha256_hash(file)
-        vt_url = vt_check(file_hash)
-        print(f'{file}\t{file_hash}\t{vt_url}')
+        vt_url, positives, total = vt_check(file_hash)
+
+        print(f'{file}\t{file_hash}\t({positives}/{total})\t{vt_url}')
 
         if len(files) > 4:
             time.sleep(16)
